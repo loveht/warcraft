@@ -30,6 +30,7 @@ venv
 .eggs
 tmp
 *.db
+*.sqlite
 *.bak
 
 

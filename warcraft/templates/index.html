@@ -1,0 +1,30 @@
+{% extends 'base.html'%}
+
+{% block title%} {{title}} {% endblock %}
+
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.css" />
+<style>
+    #mapid {height:300px}
+</style>
+{% endblock %}
+
+{% block page_content%}
+<h1>{{ _('Hello %(name)s', name = name) }}</h1>
+<div id="mapid"></div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+ <script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+ <script>
+     var mymap = L.map('mapid').setView([23.345, 113.345], 13);
+     //http://t{s}.tianditu.cn/DataServer?T=vec_w&X={x}&Y={y}&L={z}
+     L.tileLayer('http://t{s}.tianditu.com/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=tiles', {
+    attribution: 'Map data &copy; <a href="http://www.tianditu.com">TianDiTu</a> contributors, <a href="http://www.ctune.cn">R & D</a>, Product © <a href="http://www.chinadci.com">ChinaDCI</a>',
+    maxZoom: 18,
+    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7']
+}).addTo(mymap)
+</script>
+{% endblock %}

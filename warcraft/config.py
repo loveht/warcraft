@@ -47,6 +47,8 @@ class Config:
     #----
     APP_NAME = "WarCraft"
 
+    WARCRAFT_POSTS_PER_PAGE = 10
+
     @staticmethod
     def init_app(app):
         pass

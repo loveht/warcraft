@@ -4,7 +4,7 @@ from flask_migrate import Migrate, MigrateCommand
 
 import warcraft
 from warcraft import create_app, db
-from warcraft.models import User, Follow, Role, Permission, Post, Comment
+from warcraft.models import User, Follow, Role, FPermission, Post, Comment
 
 app = create_app()
 config = app.config
@@ -14,7 +14,7 @@ migrate = Migrate(app, db)
 
 def make_shell_context():
     return dict(app=app, db=db, User=User, Follow=Follow, Role=Role,
-                Permission=Permission, Post=Post, Comment=Comment)
+                FPermission=FPermission, Post=Post, Comment=Comment)
          
 manager.add_command("shell", Shell(make_context=make_shell_context))
 manager.add_command('db', MigrateCommand)

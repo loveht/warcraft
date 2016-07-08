@@ -9,45 +9,93 @@ from flask import current_app, request, url_for
 from flask_login import UserMixin, AnonymousUserMixin
 from . import db, login_manager
 
-class Permission:
+class FPermission:
     FOLLOW = 0x01
     COMMENT = 0x02
     WRITE_ARTICLES = 0x04
     MODERATE_COMMENTS = 0x08
     ADMINISTER = 0x80
 
+class Permission(db.Model):
+    __tablename__ = 'permission'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    def __repr__(self):
+        return self.name
+
+class ViewMenu(db.Model):
+    __tablename__ = 'view_menu'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__)) and (self.name == other.name)
+
+    def __neq__(self, other):
+        return self.name != other.name
+
+    def __repr__(self):
+        return self.name
+
+class PermissionView(db.Model):
+    __tablename__ = 'permission_view'
+    id = db.Column(db.Integer, primary_key=True)
+    permission_id = db.Column(db.Integer, db.ForeignKey('permission.id'))
+    permission = db.relationship("Permission")
+    view_menu_id = db.Column(db.Integer, db.ForeignKey('view_menu.id'))
+    view_menu = db.relationship("ViewMenu")
+
+    def __repr__(self):
+        return str(self.permission).replace('_', ' ') + ' on ' + str(self.view_menu)
+
+
+assoc_permissionview_role = db.Table('permission_view_role', db.Model.metadata,
+                                  db.Column('id', db.Integer, db.Sequence('permission_view_role_id_seq'), primary_key=True),
+                                  db.Column('permission_view_id', db.Integer, db.ForeignKey('permission_view.id')),
+                                  db.Column('role_id', db.Integer, db.ForeignKey('roleinfo.id'))
+)
+
+
 class Role(db.Model):
     __tablename__ = 'roleinfo'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
     default = db.Column(db.Boolean, default=False, index=True)
-    permissions = db.Column(db.Integer)
+    fpermissions = db.Column(db.Integer)
+    permissions = db.relationship('PermissionView', secondary=assoc_permissionview_role, backref='role')
 
     users = db.relationship('User', backref='role', lazy='dynamic')
 
     @staticmethod
     def insert_roles():
         roles = {
-            'User': (Permission.FOLLOW |
-                     Permission.COMMENT |
-                     Permission.WRITE_ARTICLES, True),
-            'Moderator': (Permission.FOLLOW |
-                          Permission.COMMENT |
-                          Permission.WRITE_ARTICLES |
-                          Permission.MODERATE_COMMENTS, False),
+            'User': (FPermission.FOLLOW |
+                     FPermission.COMMENT |
+                     FPermission.WRITE_ARTICLES, True),
+            'Moderator': (FPermission.FOLLOW |
+                          FPermission.COMMENT |
+                          FPermission.WRITE_ARTICLES |
+                          FPermission.MODERATE_COMMENTS, False),
             'Administrator': (0xff, False)
         }
         for r in roles:
             role = Role.query.filter_by(name=r).first()
             if role is None:
                 role = Role(name=r)
-            role.permissions = roles[r][0]
+            role.fpermissions = roles[r][0]
             role.default = roles[r][1]
             db.session.add(role)
         db.session.commit()
 
     def __repr__(self):
         return '<Role %r>' % self.name
+
+assoc_user_role = db.Table('user_role', db.Model.metadata,
+                                  db.Column('id', db.Integer, primary_key=True),
+                                  db.Column('userid', db.Integer, db.ForeignKey('userinfo.id')),
+                                  db.Column('roleid', db.Integer, db.ForeignKey('roleinfo.id'))
+)
 
 class Follow(db.Model):
     __tablename__ = 'follows'
@@ -62,7 +110,17 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(64), unique=True, index=True)
     password_hash = db.Column(db.String(128))
 
+    first_name = db.Column(db.String(64),server_default='first_name', nullable=False)
+    last_name = db.Column(db.String(64), server_default='last_name', nullable=False)
+    active = db.Column(db.Boolean)
     role_id = db.Column(db.Integer, db.ForeignKey('roleinfo.id'))
+    roles = db.relationship('Role', secondary=assoc_user_role, backref='user')
+    last_login = db.Column(db.DateTime())
+    login_count = db.Column(db.Integer)
+    fail_login_count = db.Column(db.Integer)
+    created_on = db.Column(db.DateTime(), default=datetime.now, nullable=True)
+    changed_on = db.Column(db.DateTime(), default=datetime.now, nullable=True)
+
     confirmed = db.Column(db.Boolean, default=False)
     name = db.Column(db.String(64))
     location = db.Column(db.String(64))
@@ -88,7 +146,7 @@ class User(UserMixin, db.Model):
         super(User, self).__init__(**kwargs)
         if self.role is None:
             if self.email == current_app.config['WARCRAFT_ADMIN']:
-                self.role = Role.query.filter_by(permissions=0xff).first()
+                self.role = Role.query.filter_by(fpermissions=0xff).first()
             if self.role is None:
                 self.role = Role.query.filter_by(default=True).first()
         if self.email is not None and self.avatar_hash is None:
@@ -163,10 +221,10 @@ class User(UserMixin, db.Model):
     
     def can(self, permissions):
         return self.role is not None and \
-            (self.role.permissions & permissions) == permissions
+            (self.role.fpermissions & permissions) == permissions
 
     def is_administrator(self):
-        return self.can(Permission.ADMINISTER)
+        return self.can(FPermission.ADMINISTER)
 
     def ping(self):
         self.last_seen = datetime.utcnow()
@@ -331,3 +389,14 @@ class Comment(db.Model):
 
 
 db.event.listen(Comment.body, 'set', Comment.on_changed_body)
+
+class RegisterUser(db.Model):
+    __tablename__ = 'register_user'
+    id = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(64), nullable=False)
+    last_name = db.Column(db.String(64), nullable=False)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    password = db.Column(db.String(256))
+    email = db.Column(db.String(64), nullable=False)
+    registration_date = db.Column(db.DateTime(), default=datetime.now, nullable=True)
+    registration_hash = db.Column(db.String(256))

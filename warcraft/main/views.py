@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import render_template, current_app,session, redirect, url_for, request
+from flask import render_template, current_app,session, redirect, url_for, request, abort, flash, make_response
 from flask_login import login_required, current_user
 from flask_sqlalchemy import get_debug_queries
 from flask_babel import Babel, gettext as _
@@ -7,7 +7,7 @@ from flask_babel import Babel, gettext as _
 from . import main
 from .forms import EditProfileForm, EditProfileAdminForm, PostForm, CommentForm
 from .. import db, babel
-from ..models import Permission, Role, User, Post, Comment
+from ..models import FPermission, Role, User, Post, Comment
 from ..decorators import admin_required, permission_required
 
 @babel.localeselector
@@ -19,7 +19,7 @@ def get_locale():
 def index():
     title = _("Title")
     form = PostForm()
-    if current_user.can(Permission.WRITE_ARTICLES) and \
+    if current_user.can(FPermission.WRITE_ARTICLES) and \
             form.validate_on_submit():
         post = Post(body=form.body.data,
                     author=current_user._get_current_object())
@@ -127,7 +127,7 @@ def post(id):
 def edit(id):
     post = Post.query.get_or_404(id)
     if current_user != post.author and \
-            not current_user.can(Permission.ADMINISTER):
+            not current_user.can(FPermission.ADMINISTER):
         abort(403)
     form = PostForm()
     if form.validate_on_submit():
@@ -141,7 +141,7 @@ def edit(id):
 
 @main.route('/follow/<username>')
 @login_required
-@permission_required(Permission.FOLLOW)
+@permission_required(FPermission.FOLLOW)
 def follow(username):
     user = User.query.filter_by(username=username).first()
     if user is None:
@@ -157,7 +157,7 @@ def follow(username):
 
 @main.route('/unfollow/<username>')
 @login_required
-@permission_required(Permission.FOLLOW)
+@permission_required(FPermission.FOLLOW)
 def unfollow(username):
     user = User.query.filter_by(username=username).first()
     if user is None:
@@ -221,7 +221,7 @@ def show_followed():
 
 @main.route('/moderate')
 @login_required
-@permission_required(Permission.MODERATE_COMMENTS)
+@permission_required(FPermission.MODERATE_COMMENTS)
 def moderate():
     page = request.args.get('page', 1, type=int)
     pagination = Comment.query.order_by(Comment.timestamp.desc()).paginate(
@@ -234,7 +234,7 @@ def moderate():
 
 @main.route('/moderate/enable/<int:id>')
 @login_required
-@permission_required(Permission.MODERATE_COMMENTS)
+@permission_required(FPermission.MODERATE_COMMENTS)
 def moderate_enable(id):
     comment = Comment.query.get_or_404(id)
     comment.disabled = False
@@ -245,7 +245,7 @@ def moderate_enable(id):
 
 @main.route('/moderate/disable/<int:id>')
 @login_required
-@permission_required(Permission.MODERATE_COMMENTS)
+@permission_required(FPermission.MODERATE_COMMENTS)
 def moderate_disable(id):
     comment = Comment.query.get_or_404(id)
     comment.disabled = True
